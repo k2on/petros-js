@@ -1,0 +1,5 @@
+{
+  "name": "petros-js",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
