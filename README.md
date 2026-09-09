@@ -10,7 +10,7 @@ the replicas diverge silently with neither side obviously at fault.
 
 What is left for TypeScript is a socket and a clock.
 
-## packages/client — `@petros/client`
+## `@petros/client`
 
 - `Link` — a `WebSocket` that carries encoded frames in and out of a Petros
   client, holding early sends until it opens.
@@ -18,11 +18,17 @@ What is left for TypeScript is a socket and a clock.
 - `installMutators` — base64 in, a running `apply` out.
 - `usePeer` — the React binding, generic over your client and your query.
 
-Depend on it by path while it is unpublished:
+Depend on it by git while it is unpublished:
 
 ```json
-"@petros/client": "file:../../petros-js/packages/client"
+"@petros/client": "github:k2on/petros-js#<sha>"
 ```
 
-`file:` and not `link:` — in bun, `link:` means a package registered with
-`bun link`, not a path, and fails with `FileNotFound`.
+Pinned to a commit rather than a branch, so a build a month from now installs
+what this one did.
+
+This repository *is* the package — no workspace, no `packages/` — because a git
+dependency installs a repository root and neither npm nor bun can point at a
+subdirectory inside one. A `file:` path would work on a laptop and fail in any
+build container that checks out one repository, which is where the last one was
+caught.

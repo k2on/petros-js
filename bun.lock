@@ -2,11 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "petros-js",
-    },
-    "packages/client": {
       "name": "@petros/client",
-      "version": "0.1.0",
       "devDependencies": {
         "@types/react": "~19.2.2",
         "react": "19.2.3",
@@ -21,8 +17,6 @@
     },
   },
   "packages": {
-    "@petros/client": ["@petros/client@workspace:packages/client"],
-
     "@types/react": ["@types/react@19.2.18", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w=="],
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
