@@ -1,3 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# A library has nothing to lock that a consumer will use, and bun rewrites this
+# on every install here.
+bun.lock
