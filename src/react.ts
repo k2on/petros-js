@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { asNumber, messageOf, type PetrosClient } from './client';
-import { session as openSession } from './session';
+import { held, session as openSession, type Scratch } from './session';
 
 const now = (): number =>
   typeof globalThis.performance?.now === 'function'
@@ -31,6 +31,8 @@ export type PeerState<T> = {
   note: string;
   /** Which mutator module is running. Moves on every hot swap. */
   mutators: number;
+  /** Where this peer is pointed, or null when it is working alone. */
+  server: string | null;
   /**
    * How long the last mutation took inside Rust, in milliseconds: the engine,
    * the module and the SQL, but not this render. The number to look at before
@@ -44,9 +46,16 @@ export type UsePeerOptions<C extends PetrosClient, T> = {
   open: () => C;
   /** What makes two peers different — an actor name, usually. */
   key: string;
-  server: string;
-  /** Your read model. Re-run whenever anything moved, never on a quiet tick. */
-  query: (client: C) => T;
+  /** Where to point it. `null` is a peer working alone, and is a choice. */
+  server: string | null;
+  /**
+   * Your read model. Re-run whenever anything moved, never on a quiet tick.
+   *
+   * The second argument is per-session [`Scratch`], and a query reading a
+   * *maintained* view needs it: the view reports what moved since it was last
+   * asked, so whatever is being moved has to outlive the component asking.
+   */
+  query: (client: C, scratch: Scratch) => T;
   /**
    * Install the module this bundle carries, and reinstall when it changes.
    * Both stay in the app: Metro needs a static path to the generated file, so
@@ -62,6 +71,8 @@ export type Peer<C extends PetrosClient, T> = PeerState<T> & {
   toggleLink: () => void;
   /** Reconnect now. Wire this to `AppState` becoming active. */
   reconnect: () => void;
+  /** Point this peer somewhere else, or nowhere, without remounting. */
+  setServer: (next: string | null) => void;
 };
 
 export function usePeer<C extends PetrosClient, T>(
@@ -79,6 +90,7 @@ export function usePeer<C extends PetrosClient, T>(
     note: '',
     mutators: 0,
     lastMutationMs: null,
+    server,
   });
 
   // Borrowed, not created. If this key has been seen before, the database is
@@ -91,22 +103,31 @@ export function usePeer<C extends PetrosClient, T>(
       setState((s) => ({ ...s, note: `could not open the database: ${messageOf(e)}` }));
       return null;
     }
-    // `server` is fixed for the life of a screen; changing it should not silently
-    // reopen the database under the same actor.
+    // Keyed on the actor alone. A different server is not a different peer —
+    // same database, same pending edits, somewhere else to offer them — so it
+    // is applied to the live session below rather than reopening anything.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+
+  // Where it is pointed can change while it runs: a URL typed in, or the choice
+  // to work alone. Without this the first server a process ever saw was the
+  // only one it would use, and a corrected address did nothing until a restart.
+  useEffect(() => {
+    peer?.setServer(server);
+  }, [peer, server]);
 
   const snapshot = useCallback(() => {
     if (!peer) return;
     const client = peer.client;
     setState({
-      data: latest.current.query(client),
+      data: latest.current.query(client, peer.scratch),
       cursor: asNumber(client.cursor()),
       pending: client.pendingLen(),
       online: peer.connected(),
       note: peer.note,
       mutators: asNumber(client.mutatorsGeneration()),
       lastMutationMs: peer.lastMutationMs,
+      server: peer.server,
     });
   }, [peer]);
 
@@ -158,6 +179,7 @@ export function usePeer<C extends PetrosClient, T>(
       run,
       toggleLink: () => peer?.toggleLink(),
       reconnect: () => peer?.reconnect(),
+      setServer: (next: string | null) => peer?.setServer(next),
     }),
     [state, run, peer],
   );

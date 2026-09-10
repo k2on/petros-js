@@ -12,4 +12,11 @@
 export { asNumber, messageOf, type Count, type PetrosClient, type Rejection } from './client';
 export { Link, type LinkEvents } from './link';
 export { decodeBase64, installMutators } from './mutators';
-export { endSession, session, type Session } from './session';
+export { endSession, held, session, type Scratch, type Session } from './session';
+export {
+  forgetServer,
+  memoryStorage,
+  recallServer,
+  rememberServer,
+  type Storage,
+} from './storage';

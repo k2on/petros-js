@@ -14,6 +14,12 @@
  *
  * The database is never closed. One connection per actor for the life of the
  * process is the same assumption a desktop peer makes.
+ *
+ * A session also owns *where* it is pointed. `server` is nullable, and null is
+ * not a degraded connected: it is a peer deliberately working alone, with no
+ * socket, no connection attempt and no backoff. That is the same state the
+ * engine is in between reconnects, so nothing downstream needs a second notion
+ * of offline — but it has to be reachable without lying about a URL first.
  */
 
 import { messageOf, type PetrosClient } from './client';
@@ -25,9 +31,33 @@ const TICK_MS = 50;
 /** Backoff for an unattended reconnect: quick at first, then patient. */
 const RETRY_MS = [500, 1000, 2000, 5000, 10_000, 30_000];
 
+/**
+ * Whatever a query accumulates between calls.
+ *
+ * A maintained view reports what *moved*, so its reader has to keep the thing
+ * being moved. That reader is usually a component, and a component is the wrong
+ * lifetime: the view's idea of what the reader has already seen lives here, in
+ * the session, so a list spliced from its patches has to live here too. Held in
+ * a ref instead, it starts empty on the next mount while the view goes on
+ * reporting deltas against a list nobody has — and the screen shows nothing.
+ */
+export type Scratch = Map<string, unknown>;
+
+/** The slot named `name`, created on first ask. */
+export function held<T>(scratch: Scratch, name: string, init: () => T): T {
+  if (!scratch.has(name)) scratch.set(name, init());
+  return scratch.get(name) as T;
+}
+
 export type Session<C extends PetrosClient> = {
   readonly client: C;
   readonly link: Link;
+  /** Where this peer is pointed, or null when it is working alone. */
+  readonly server: string | null;
+  /** State that outlives the components reading it. See [`Scratch`]. */
+  readonly scratch: Scratch;
+  /** Point this peer somewhere else, or nowhere. Takes effect now. */
+  setServer(next: string | null): void;
   /** The last thing worth saying out loud. */
   note: string;
   /** How long the last mutation took inside Rust. */
@@ -54,20 +84,31 @@ const sessions = new Map<string, Session<PetrosClient>>();
 export function session<C extends PetrosClient>(
   key: string,
   open: () => C,
-  server: string,
+  server: string | null,
 ): Session<C> {
   const existing = sessions.get(key);
   if (existing) return existing as Session<C>;
 
   const listeners = new Set<() => void>();
   const client = open();
+  const scratch: Scratch = new Map();
+  let target = server;
   let attempt = 0;
   let retry: ReturnType<typeof setTimeout> | null = null;
-  let wanted = true;
+  let wanted = target !== null;
+
+  const stopRetrying = () => {
+    if (retry) clearTimeout(retry);
+    retry = null;
+  };
 
   const self: Session<C> = {
     client,
     link: null as unknown as Link,
+    scratch,
+    get server() {
+      return target;
+    },
     note: '',
     lastMutationMs: null,
     dirty: true,
@@ -80,18 +121,39 @@ export function session<C extends PetrosClient>(
       for (const listener of listeners) listener();
     },
     reconnect() {
+      if (target === null) return;
       wanted = true;
-      if (!self.link.connected) self.link.connect(server);
+      if (!self.link.connected) self.link.connect(target);
     },
     connected() {
       return self.link.connected;
     },
+    setServer(next) {
+      if (next === target) return;
+      target = next;
+      attempt = 0;
+      stopRetrying();
+      // Disconnect quietly: the note that matters is the one about where this
+      // peer is now, not that it left where it was.
+      self.link.disconnect();
+      if (next === null) {
+        wanted = false;
+        self.note = 'working alone — edits are kept and offered when you link up';
+        self.changed();
+        return;
+      }
+      wanted = true;
+      self.link.connect(next);
+    },
     toggleLink() {
       if (self.link.connected) {
         wanted = false;
-        if (retry) clearTimeout(retry);
-        retry = null;
+        stopRetrying();
         self.link.disconnect('gone offline — edits pile up locally');
+      } else if (target === null) {
+        // Nothing to toggle back to. Saying so beats a silent no-op.
+        self.note = 'no server to link up to — enter one to sync';
+        self.changed();
       } else {
         attempt = 0;
         self.reconnect();
@@ -111,16 +173,16 @@ export function session<C extends PetrosClient>(
   // socket dies with it; the engine treats that as being offline, so coming
   // back is a `Hello` and whatever the log gained meanwhile.
   const schedule = () => {
-    if (!wanted || link.connected || retry) return;
+    if (!wanted || target === null || link.connected || retry) return;
     const wait = RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)];
     attempt += 1;
     retry = setTimeout(() => {
       retry = null;
-      if (wanted && !link.connected) link.connect(server);
+      if (wanted && target !== null && !link.connected) link.connect(target);
     }, wait);
   };
 
-  link.connect(server);
+  if (target !== null) link.connect(target);
 
   // The pump belongs to the session rather than to a component, so it keeps
   // running with nothing mounted. That is the whole point: a screen you come

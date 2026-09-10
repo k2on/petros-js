@@ -17,6 +17,12 @@ What is left for TypeScript is a socket and a clock.
 - `pump` — a sans-io client has to be driven by someone; this is that someone.
 - `installMutators` — base64 in, a running `apply` out.
 - `usePeer` — the React binding, generic over your client and your query.
+- `recallServer` / `rememberServer` — which server a peer joined, kept across
+  launches, over a `Storage` the app supplies. "Working alone" is one of the
+  answers rather than the absence of one.
+
+A session's `server` is nullable and can be changed while it runs, so a peer can
+be pointed somewhere else, or nowhere, without reopening its database.
 
 Depend on it by git while it is unpublished:
 
