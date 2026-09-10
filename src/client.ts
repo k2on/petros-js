@@ -22,6 +22,17 @@ export interface PetrosClient {
   recv(frame: ArrayBuffer): void;
   /** Ask for everything since our cursor and re-offer everything pending. */
   connected(): void;
+  /**
+   * Nothing is carrying frames any more: a dropped socket, or a peer working
+   * deliberately alone. The engine drops its outbox and stops filling it.
+   *
+   * Optional because an engine older than this method still works — the
+   * transport just goes back to throwing frames on the floor itself, which is
+   * what everything did before the engine had a word for it.
+   */
+  disconnected?(): void;
+  /** Whether the engine believes anything is carrying its frames. */
+  linked?(): boolean;
   /** How much of the server's log has been applied. */
   cursor(): Count;
   /** How many of our own mutations no server has confirmed yet. */

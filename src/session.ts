@@ -182,7 +182,11 @@ export function session<C extends PetrosClient>(
     }, wait);
   };
 
-  if (target !== null) link.connect(target);
+  // A peer opened with no server has never had a transport, so say so once:
+  // the engine starts out assuming its frames are being carried, which is right
+  // for everyone who never mentions a connection and wrong for exactly this.
+  if (target === null) client.disconnected?.();
+  else link.connect(target);
 
   // The pump belongs to the session rather than to a component, so it keeps
   // running with nothing mounted. That is the whole point: a screen you come

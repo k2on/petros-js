@@ -21,9 +21,11 @@ export type LinkEvents = {
  *
  * Two wrinkles worth keeping. A `WebSocket` throws on send until it is open,
  * and the first thing a client says is its `Hello` — so early frames are held
- * and flushed on open. And a client with no connection should have its outbox
- * drained and dropped rather than left to grow: reconnecting re-offers
- * everything still pending, and the server dedupes what it has already seen.
+ * and flushed on open. And the engine is told when there is no longer a socket:
+ * it keeps its own outbox empty from then on, which is a thing only it can do,
+ * since a transport can decline to *read* frames but cannot stop them being
+ * written. Reconnecting re-offers everything still pending, and the server
+ * dedupes what it has already seen.
  */
 export class Link {
   private socket: WebSocket | null = null;
@@ -88,6 +90,8 @@ export class Link {
     this.socket = null;
     this.open = false;
     this.backlog = [];
+    // The engine stops queueing rather than us stopping collecting.
+    this.client.disconnected?.();
     if (note) this.note(note);
     else this.events.onChange?.();
     if (!socket) return;
@@ -113,6 +117,8 @@ export class Link {
     let changed = false;
     try {
       for (const frame of this.client.takeOutgoing()) {
+        // Belt and braces: an engine that predates `disconnected` still hands
+        // frames over with nowhere to put them.
         if (!this.socket) continue;
         if (this.open) this.socket.send(frame);
         else this.backlog.push(frame);
