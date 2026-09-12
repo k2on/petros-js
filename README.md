@@ -38,3 +38,42 @@ dependency installs a repository root and neither npm nor bun can point at a
 subdirectory inside one. A `file:` path would work on a laptop and fail in any
 build container that checks out one repository, which is where the last one was
 caught.
+
+## Building an app for a phone
+
+The nix half of this repository is how a Petros app reaches Android without
+the network and without recompiling the world: `ubrn` built once from a
+committed lockfile, the engine cross-compiled in two layers so a changed
+mutation recompiles the app's crates and nothing else, and the Expo project's
+gradle state carried between builds. It builds on
+[expo.nix](https://github.com/k2on/expo.nix) and
+[android.nix](https://github.com/k2on/android.nix), and an app needs only
+this input to get all three:
+
+```nix
+inputs.petros-js = {
+  url = "github:k2on/petros-js";
+  inputs.nixpkgs.follows = "nixpkgs";
+  inputs.petros.follows = "petros";
+};
+
+{ imports = [ inputs.petros-js.flakeModules.default ]; }
+
+perSystem = { petrosJs, ... }:
+  let app = petrosJs.mkApp { name = "myapp"; … }; in
+  { packages = { inherit (app) apk gradleState engine deps; }; };
+```
+
+`mkApp` takes the app's files and hashes — its workspace, its narrowed
+engine tree, the Expo project, the `ubrn` lockfile, `gradle-deps.json`, the
+gradle version — and returns every derivation on the way, because each is
+worth building alone when something is slow or broken. `harken` is the app
+this was extracted from, and its `modules/android.nix` is the whole of what
+an app has to say.
+
+```
+nix/lib/rust.nix    mkUbrn, stubSources, mkEngine
+nix/lib/app.nix     mkApp
+nix/default.nix     the non-flake entry point
+modules/            flake-parts wiring; `_petros-js.nix` is the module an app gets
+```
