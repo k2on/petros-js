@@ -12,7 +12,7 @@
 }:
 let
   fetchLocked = name:
-    let locked = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.${name}.locked;
+    let locked = (builtins.fromJSON (builtins.readFile ../flake.lock)).nodes.${name}.locked;
     in builtins.fetchGit {
       url = "https://github.com/${locked.owner}/${locked.repo}";
       inherit (locked) rev;
