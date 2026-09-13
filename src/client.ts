@@ -23,6 +23,17 @@ export interface PetrosClient {
   /** Ask for everything since our cursor and re-offer everything pending. */
   connected(): void;
   /**
+   * What proves this peer's login to the server, sent in every `Hello` from
+   * now on. Set before `connected`. Optional for an engine that predates
+   * signing in, which is then trusted or turned away by the server it meets.
+   */
+  setToken?(token: string | undefined): void;
+  /**
+   * Why the server turned this peer away, if it did since the last ask. The
+   * socket is gone by then: sign in again, set the new token, reconnect.
+   */
+  takeDenial?(): string | undefined;
+  /**
    * Nothing is carrying frames any more: a dropped socket, or a peer working
    * deliberately alone. The engine drops its outbox and stops filling it.
    *

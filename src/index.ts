@@ -9,6 +9,19 @@
  * neither side obviously at fault.
  */
 
+export {
+  codeOf,
+  exchange,
+  forgetLogin,
+  loginUrl,
+  logout,
+  recallLogin,
+  rememberLogin,
+  socketUrl,
+  whoami,
+  type Account,
+  type Login,
+} from './auth';
 export { asNumber, messageOf, type Count, type PetrosClient, type Rejection } from './client';
 export { Link, type LinkEvents } from './link';
 export { decodeBase64, installMutators } from './mutators';

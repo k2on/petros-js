@@ -14,6 +14,12 @@ export type LinkEvents = {
   onNote?: (note: string) => void;
   /** Anything happened that a view should be recomputed for. */
   onChange?: () => void;
+  /**
+   * The server turned this peer away: not signed in, or not as who it
+   * claims. The socket is closed behind it and nothing reconnects until a
+   * new token is set — retrying a refused login would only be refused again.
+   */
+  onDenied?: (reason: string) => void;
 };
 
 /**
@@ -31,6 +37,8 @@ export class Link {
   private socket: WebSocket | null = null;
   private open = false;
   private backlog: ArrayBuffer[] = [];
+  private token: string | undefined;
+  private denied = false;
 
   constructor(
     private readonly client: PetrosClient,
@@ -39,6 +47,17 @@ export class Link {
 
   get connected(): boolean {
     return this.socket !== null;
+  }
+
+  /**
+   * What to prove the login with. Handed to the engine, which puts it in
+   * every `Hello` — so a token set while connected takes effect on the next
+   * connect, and the caller reconnects to use it now.
+   */
+  setToken(token: string | undefined): void {
+    this.token = token;
+    this.denied = false;
+    this.client.setToken?.(token);
   }
 
   connect(url: string): void {
@@ -68,6 +87,15 @@ export class Link {
       } catch (e) {
         this.note(messageOf(e));
       }
+      // A denial is the last frame on this socket. Say so before the close
+      // that follows it, which would otherwise read as a dropped link.
+      const denial = this.client.takeDenial?.();
+      if (denial !== undefined) {
+        this.denied = true;
+        this.events.onDenied?.(denial);
+        this.disconnect(`signed out: ${denial}`);
+        return;
+      }
       this.events.onChange?.();
     };
     socket.onerror = () => {
@@ -78,11 +106,17 @@ export class Link {
     };
 
     try {
+      this.client.setToken?.(this.token);
       this.client.connected();
     } catch (e) {
       this.note(messageOf(e));
     }
     this.events.onChange?.();
+  }
+
+  /** Whether the last connection ended in the server turning this peer away. */
+  get wasDenied(): boolean {
+    return this.denied;
   }
 
   disconnect(note = ''): void {

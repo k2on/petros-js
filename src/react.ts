@@ -34,6 +34,12 @@ export type PeerState<T> = {
   /** Where this peer is pointed, or null when it is working alone. */
   server: string | null;
   /**
+   * Why the server turned this peer away, or null while it is welcome. Set
+   * when a token expires or is revoked; cleared by a new one. A screen shows
+   * a sign-in button on it, and nothing reconnects until that is pressed.
+   */
+  denied: string | null;
+  /**
    * How long the last mutation took inside Rust, in milliseconds: the engine,
    * the module and the SQL, but not this render. The number to look at before
    * believing the device is the slow part.
@@ -48,6 +54,12 @@ export type UsePeerOptions<C extends PetrosClient, T> = {
   key: string;
   /** Where to point it. `null` is a peer working alone, and is a choice. */
   server: string | null;
+  /**
+   * What proves this peer's login to the server — the token a sign-in
+   * handed back. `undefined` for a server that does not ask. A change
+   * reconnects with the new one.
+   */
+  token?: string;
   /**
    * Your read model. Re-run whenever anything moved, never on a quiet tick.
    *
@@ -78,7 +90,7 @@ export type Peer<C extends PetrosClient, T> = PeerState<T> & {
 export function usePeer<C extends PetrosClient, T>(
   options: UsePeerOptions<C, T>,
 ): Peer<C, T> {
-  const { open, key, server, query, install, watch } = options;
+  const { open, key, server, token, query, install, watch } = options;
   const latest = useRef({ query, open, install, watch });
   latest.current = { query, open, install, watch };
 
@@ -91,6 +103,7 @@ export function usePeer<C extends PetrosClient, T>(
     mutators: 0,
     lastMutationMs: null,
     server,
+    denied: null,
   });
 
   // Borrowed, not created. If this key has been seen before, the database is
@@ -98,7 +111,7 @@ export function usePeer<C extends PetrosClient, T>(
   // was mounted is already applied.
   const peer = useMemo(() => {
     try {
-      return openSession<C>(key, () => latest.current.open(), server);
+      return openSession<C>(key, () => latest.current.open(), server, token);
     } catch (e) {
       setState((s) => ({ ...s, note: `could not open the database: ${messageOf(e)}` }));
       return null;
@@ -116,6 +129,19 @@ export function usePeer<C extends PetrosClient, T>(
     peer?.setServer(server);
   }, [peer, server]);
 
+  // Signed in again, or out: the engine says the new token on its next
+  // `Hello`, which the session makes now.
+  const first = useRef(true);
+  useEffect(() => {
+    // The session was opened with this token; saying it again would only
+    // reconnect a socket that is fine.
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    peer?.setToken(token);
+  }, [peer, token]);
+
   const snapshot = useCallback(() => {
     if (!peer) return;
     const client = peer.client;
@@ -128,6 +154,7 @@ export function usePeer<C extends PetrosClient, T>(
       mutators: asNumber(client.mutatorsGeneration()),
       lastMutationMs: peer.lastMutationMs,
       server: peer.server,
+      denied: peer.denied,
     });
   }, [peer]);
 

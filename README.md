@@ -20,6 +20,19 @@ What is left for TypeScript is a socket and a clock.
 - `recallServer` / `rememberServer` — which server a peer joined, kept across
   launches, over a `Storage` the app supplies. "Working alone" is one of the
   answers rather than the absence of one.
+- `loginUrl` / `exchange` / `whoami` / `logout` — signing in. The server is
+  the only OpenID Connect client; a peer opens one URL and receives one
+  single-use code, and `exchange` trades it for a `Login`: the token
+  `usePeer` puts on the socket, the session its entries carry, and who it
+  is. `recallLogin` / `rememberLogin` keep it. Opening the URL stays in the
+  app — `expo-web-browser`'s `openAuthSessionAsync` on a phone — because only
+  the app knows its own URL scheme.
+- `socketUrl` — `/sync` beside the login, `wss` for `https`. A peer is told
+  one address and derives the other.
+
+A peer that the server turns away — an expired token, a revoked session —
+stops reconnecting and says why in `denied`; a new `token` reconnects. What
+it authored meanwhile is kept and offered then.
 
 A session's `server` is nullable and can be changed while it runs, so a peer can
 be pointed somewhere else, or nowhere, without reopening its database.

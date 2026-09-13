@@ -58,6 +58,14 @@ export type Session<C extends PetrosClient> = {
   readonly scratch: Scratch;
   /** Point this peer somewhere else, or nowhere. Takes effect now. */
   setServer(next: string | null): void;
+  /**
+   * What proves this peer's login. A new one reconnects, which is how a
+   * peer that was turned away gets back in; `undefined` is a peer of a
+   * server that does not ask.
+   */
+  setToken(token: string | undefined): void;
+  /** Why the server turned this peer away, until a new token is set. */
+  denied: string | null;
   /** The last thing worth saying out loud. */
   note: string;
   /** How long the last mutation took inside Rust. */
@@ -85,6 +93,7 @@ export function session<C extends PetrosClient>(
   key: string,
   open: () => C,
   server: string | null,
+  token?: string,
 ): Session<C> {
   const existing = sessions.get(key);
   if (existing) return existing as Session<C>;
@@ -111,6 +120,7 @@ export function session<C extends PetrosClient>(
     },
     note: '',
     lastMutationMs: null,
+    denied: null,
     dirty: true,
     subscribe(listener) {
       listeners.add(listener);
@@ -127,6 +137,17 @@ export function session<C extends PetrosClient>(
     },
     connected() {
       return self.link.connected;
+    },
+    setToken(next) {
+      self.link.setToken(next);
+      self.denied = null;
+      if (target === null) return;
+      // The `Hello` has already been said on a live socket; say it again
+      // with the token that should have been on it.
+      wanted = true;
+      attempt = 0;
+      self.link.disconnect();
+      self.link.connect(target);
     },
     setServer(next) {
       if (next === target) return;
@@ -166,8 +187,16 @@ export function session<C extends PetrosClient>(
       self.note = note;
     },
     onChange: () => self.changed(),
+    // Turned away. Stop knocking: the same token gets the same answer, and
+    // the backoff would only make a refused login look like a bad network.
+    onDenied: (reason) => {
+      wanted = false;
+      stopRetrying();
+      self.denied = reason;
+    },
   });
   (self as { link: Link }).link = link;
+  link.setToken(token);
 
   // Reconnect without being asked. The OS suspends a backgrounded app and the
   // socket dies with it; the engine treats that as being offline, so coming
