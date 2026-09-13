@@ -7,8 +7,8 @@
 # fetched at the revisions this repository's `flake.lock` pins.
 { pkgs ? import <nixpkgs> { }
 , petros
-, android ? import (fetchLocked "android") { inherit pkgs; }
-, expo ? import (fetchLocked "expo") { inherit pkgs android; }
+, android ? null
+, expo ? null
 }:
 let
   fetchLocked = name:
@@ -18,5 +18,7 @@ let
       inherit (locked) rev;
       allRefs = true;
     };
+  android' = if android != null then android else import (fetchLocked "android") { inherit pkgs; };
+  expo' = if expo != null then expo else import (fetchLocked "expo") { inherit pkgs; android = android'; };
 in
-import ./lib { inherit pkgs android expo petros; }
+import ./lib { inherit pkgs petros; android = android'; expo = expo'; }
