@@ -77,3 +77,9 @@ nix/lib/app.nix     mkApp
 nix/default.nix     the non-flake entry point
 modules/            flake-parts wiring; `_petros-js.nix` is the module an app gets
 ```
+
+`nix/app` is the same as a flake-parts module: an app whose `flake.nix` is
+`petros.lib.mkApp` imports it from the revision `package.json` pins and sets
+`mobile.name`, its hashes and its EAS profiles, and the phone's packages,
+`nix run` programs, generated files and `android` shell all follow. See
+`nix/app/default.nix`.
