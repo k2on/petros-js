@@ -42,11 +42,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789249644,
-        "narHash": "sha256-8WyngkecEtyWaq1r9xD1Mp8AHap3KgreaMwUmOdwFFY=",
+        "lastModified": 1789473264,
+        "narHash": "sha256-MVc1TWhK+vbvhkQXNpgvI2TKrqiKKA4W/3/eAyNp9bY=",
         "owner": "k2on",
         "repo": "expo.nix",
-        "rev": "adedf265bf23e62f82da0cd01a94cbd38b3ea0e1",
+        "rev": "91f11fbc3a147bb049132c0f1fac027d31e54325",
         "type": "github"
       },
       "original": {
