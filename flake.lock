@@ -13,11 +13,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789249567,
-        "narHash": "sha256-URW4Z8JeFWNnm5u5gRzXZVVvEq9PZc5Iw7EJ22qRXSk=",
+        "lastModified": 1789473138,
+        "narHash": "sha256-M+ITdatb7cfXZaVlI/aRmonD8IJFM100251qO1C1GDY=",
         "owner": "k2on",
         "repo": "android.nix",
-        "rev": "58c995f3a73c9bddb0c1a6f9dbce8ae261037d43",
+        "rev": "d199af108bda41c937d0c336d3cbbaa39fff1a66",
         "type": "github"
       },
       "original": {
