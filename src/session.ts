@@ -73,6 +73,16 @@ export type Session<C extends PetrosClient> = {
   /** Something changed; anything watching should recompute. */
   dirty: boolean;
   subscribe(listener: () => void): () => void;
+  /**
+   * Run `f` against the client on every turn of this session's own pump.
+   *
+   * For the state that is *not* the read model. A realtime channel —
+   * `petros::live`, on the same socket — carries what is true now rather than
+   * what is in the log, so it has to be drained on a clock and it must not
+   * drag a query along with it: this returns nothing for that reason, and
+   * whatever a tick moves tells its own readers. Returns how to stop.
+   */
+  onTick(f: (client: C) => void): () => void;
   changed(): void;
   /** Reconnect now — after the OS suspended the app, say. */
   reconnect(): void;
@@ -99,6 +109,7 @@ export function session<C extends PetrosClient>(
   if (existing) return existing as Session<C>;
 
   const listeners = new Set<() => void>();
+  const ticks = new Set<(client: PetrosClient) => void>();
   const client = open();
   const scratch: Scratch = new Map();
   let target = server;
@@ -129,6 +140,13 @@ export function session<C extends PetrosClient>(
     changed() {
       self.dirty = true;
       for (const listener of listeners) listener();
+    },
+    onTick(f) {
+      const tick = f as (client: PetrosClient) => void;
+      ticks.add(tick);
+      return () => {
+        ticks.delete(tick);
+      };
     },
     reconnect() {
       if (target === null) return;
@@ -222,7 +240,20 @@ export function session<C extends PetrosClient>(
   // back to is already up to date.
   setInterval(() => {
     try {
-      if (link.pump()) self.changed();
+      const moved = link.pump();
+      // After the pump, so a tick reading the realtime channel sees whatever
+      // this turn's frames brought, and before the notification, so what it
+      // sends goes out on the next turn rather than waiting on a view.
+      for (const tick of ticks) {
+        try {
+          tick(client);
+        } catch (e) {
+          // A tick is somebody's side channel. It is not allowed to stop the
+          // log being carried.
+          self.note = messageOf(e);
+        }
+      }
+      if (moved) self.changed();
     } catch (e) {
       self.note = messageOf(e);
       self.changed();
