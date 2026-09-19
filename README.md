@@ -16,7 +16,10 @@ What is left for TypeScript is a socket and a clock.
   client, holding early sends until it opens.
 - `pump` — a sans-io client has to be driven by someone; this is that someone.
 - `installMutators` — base64 in, a running `apply` out.
-- `usePeer` — the React binding, generic over your client and your query.
+- `usePeer` — the React binding, generic over your client and your query. Its
+  `tick` runs against the client on every turn of the session's pump, for
+  state that is not the read model — a `petros::live` room on the same socket,
+  say — and deliberately does not re-run the query.
 - `recallServer` / `rememberServer` — which server a peer joined, kept across
   launches, over a `Storage` the app supplies. "Working alone" is one of the
   answers rather than the absence of one.
@@ -36,6 +39,14 @@ it authored meanwhile is kept and offered then.
 
 A session's `server` is nullable and can be changed while it runs, so a peer can
 be pointed somewhere else, or nowhere, without reopening its database.
+
+**A frame arriving is not a reason to recompute anything.** `Link` used to
+announce every frame it handed to the engine, which ran the app's query once
+per frame: an initial sync of five hundred entries ran it five hundred times,
+and a realtime frame — which moves no row at all — ran it on whatever cadence
+the other channel speaks at, forever. A frame is recorded instead, and the
+next `pump` says whether the *log* moved by asking the cursor. A burst is one
+recompute and a live frame is none.
 
 Depend on it by git while it is unpublished:
 

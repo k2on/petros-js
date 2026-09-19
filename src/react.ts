@@ -75,6 +75,16 @@ export type UsePeerOptions<C extends PetrosClient, T> = {
    */
   install?: (client: C) => string;
   watch?: (client: C, onSwap: (note: string) => void) => () => void;
+  /**
+   * Run on every turn of the session's pump, for state that is not the read
+   * model — a realtime channel on the same socket, say.
+   *
+   * Deliberately not a query and deliberately returning nothing: what a tick
+   * moves is somebody else's to draw, and making it re-run [`query`] would
+   * mean the whole read model recomputing on whatever cadence the other
+   * channel happens to speak at. See `Session.onTick`.
+   */
+  tick?: (client: C) => void;
 };
 
 export type Peer<C extends PetrosClient, T> = PeerState<T> & {
@@ -90,9 +100,9 @@ export type Peer<C extends PetrosClient, T> = PeerState<T> & {
 export function usePeer<C extends PetrosClient, T>(
   options: UsePeerOptions<C, T>,
 ): Peer<C, T> {
-  const { open, key, server, token, query, install, watch } = options;
-  const latest = useRef({ query, open, install, watch });
-  latest.current = { query, open, install, watch };
+  const { open, key, server, token, query, install, watch, tick } = options;
+  const latest = useRef({ query, open, install, watch, tick });
+  latest.current = { query, open, install, watch, tick };
 
   const [state, setState] = useState<PeerState<T>>({
     data: null,
@@ -180,6 +190,14 @@ export function usePeer<C extends PetrosClient, T>(
     snapshot();
     return peer.subscribe(snapshot);
   }, [peer, snapshot]);
+
+  // Registered once and read through the ref, so a `tick` rebuilt on every
+  // render does not mean unregistering and registering one twenty times a
+  // second.
+  useEffect(() => {
+    if (!peer) return;
+    return peer.onTick((client) => latest.current.tick?.(client));
+  }, [peer]);
 
   const run = useCallback(
     (f: (client: C) => void) => {

@@ -32,6 +32,16 @@ export type LinkEvents = {
  * since a transport can decline to *read* frames but cannot stop them being
  * written. Reconnecting re-offers everything still pending, and the server
  * dedupes what it has already seen.
+ *
+ * **A frame arriving is not a reason to recompute anything, and saying it was
+ * cost a read model per frame.** `onmessage` used to announce every frame it
+ * handed over, which is two wrong answers rather than one: an initial sync of
+ * five hundred entries ran the app's query five hundred times, and a realtime
+ * frame on the live channel — which moves no row at all — ran it once a
+ * second forever. So a frame is *recorded* here and [`Link.pump`] says
+ * afterwards whether the log actually moved, by the only thing that says so
+ * honestly: the cursor, plus whatever the server refused. A burst becomes one
+ * recompute and a live frame becomes none.
  */
 export class Link {
   private socket: WebSocket | null = null;
@@ -39,6 +49,10 @@ export class Link {
   private backlog: ArrayBuffer[] = [];
   private token: string | undefined;
   private denied = false;
+  /** A frame came in since the last pump, so the log is worth asking about. */
+  private arrived = false;
+  /** How far the log had been applied when we last said anything moved. */
+  private cursor = '';
 
   constructor(
     private readonly client: PetrosClient,
@@ -96,7 +110,10 @@ export class Link {
         this.disconnect(`signed out: ${denial}`);
         return;
       }
-      this.events.onChange?.();
+      // Not `onChange`: whether this moved anything is a question for the next
+      // pump, which is a twentieth of a second away and asks the engine rather
+      // than assuming.
+      this.arrived = true;
     };
     socket.onerror = () => {
       if (this.socket === socket) this.disconnect(`cannot reach ${url} — working offline`);
@@ -146,6 +163,14 @@ export class Link {
    *
    * Returns whether anything happened, so a caller can skip recomputing a view
    * for a tick where nothing did.
+   *
+   * Whether the frames that came in since the last turn *did* anything is the
+   * cursor's answer, not the socket's: confirmed entries land in the log and
+   * move it, a rebase follows them, and a frame that moved neither — a `Sync`
+   * with nothing in it, a heartbeat, a realtime frame on the live channel —
+   * moved no row a query could read. The cursor is a `bigint` on some engines
+   * and a `number` on others, so it is compared as text rather than with `!==`
+   * across the two.
    */
   pump(): boolean {
     let changed = false;
@@ -160,6 +185,14 @@ export class Link {
       for (const rejection of this.client.takeRejections()) {
         this.note(`the server refused a change: ${rejection.reason}`);
         changed = true;
+      }
+      if (this.arrived) {
+        this.arrived = false;
+        const cursor = String(this.client.cursor());
+        if (cursor !== this.cursor) {
+          this.cursor = cursor;
+          changed = true;
+        }
       }
     } catch (e) {
       this.note(messageOf(e));
